@@ -1,26 +1,193 @@
 import GraphiQL from 'graphiql';
 import { createGraphiQLFetcher } from '@graphiql/toolkit';
 import style from 'graphiql/graphiql.min.css';
-import {Fragment} from "react";
+import {buildClientSchema, getIntrospectionQuery, isEnumType, isWrappingType, parse} from "graphql";
+import GraphiQLExplorer from "graphiql-explorer";
+import {useEffect, useState} from "preact/compat";
+
+function unwrapOutputType(outputType) {
+    let unwrappedType = outputType;
+    while (isWrappingType(unwrappedType)) {
+        unwrappedType = unwrappedType.ofType;
+    }
+    return unwrappedType;
+}
+
+export function makeDefaultArg(
+    parentField,
+    arg
+) {
+    return (arg.name === "first" || arg.name === "orderBy");
+
+}
+
+export function getDefaultScalarArgValue(
+    parentField,
+    arg,
+    argType
+) {
+    const unwrappedType = unwrapOutputType(parentField.type);
+    if (
+        isEnumType(argType) &&
+        unwrappedType.name.startsWith("GitHub") &&
+        unwrappedType.name.endsWith("Connection")
+    ) {
+        if (
+            arg.name === "direction" &&
+            argType
+                .getValues()
+                .map(x => x.name)
+                .includes("DESC")
+        ) {
+            return { kind: "EnumValue", value: "DESC" };
+        } else if (
+            arg.name === "field" &&
+            argType
+                .getValues()
+                .map(x => x.name)
+                .includes("CREATED_AT")
+        ) {
+            return { kind: "EnumValue", value: "CREATED_AT" };
+        }
+    }
+    return GraphiQLExplorer.defaultValue(argType);
+}
+
+function fetchSchema(api, headers, excludeMutations, excludeSubscriptions){
+    return fetch(
+        api,
+        {
+            method: "POST",
+            headers: {
+                ...headers,
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({"operationName":"IntrospectionQuery", "query": getIntrospectionQuery()})
+        }
+    )
+        .then(function(response) {
+            return response.json();
+        })
+        .then(result => {
+            if (result.errors && result.errors.length > 0) {
+                return undefined;
+            }
+
+            const clientSchema = buildClientSchema(result.data);
+
+            if (excludeMutations) {
+                delete clientSchema._mutationType;
+            }
+
+            if (excludeSubscriptions) {
+                delete clientSchema._subscriptionType;
+            }
+
+            return clientSchema;
+        });
+}
 
 const App = (props) => {
-    console.dir(props);
-    if(!props.api) {
-        return (<Fragment></Fragment>);
+    if(!props.config || !props.config.api || !props.config.api.url) {
+        return (<div>
+                    <h2>GraphiQL-Webcomponent</h2>
+                    <h4>Missing Config:</h4>
+                        <code style="white-space: pre-wrap">
+{`
+    {
+        api: {
+            url: string;
+            subscriptionUrl?: string;
+            headers?: Record<string, string>
+            wsConnectionParams?: Record<string, string | Record<string, string>>
+        };
+        defaultQuery?: string;
+        disableExplorer?: boolean;
+        editorTheme?: string;
+        excludeSubscriptions?: boolean;
+        excludeMutations?: boolean;
     }
+`}
+                        </code>
+                </div>);
+    }
+
+    const [schema, setSchema] = useState();
+    const [query, setQuery] = useState(props.config?.defaultQuery ?? '');
+    const [explorerIsOpen, setExplorerIsOpen] = useState(!props.config?.disableExplorer ?? false);
+
     const fetcher = createGraphiQLFetcher({
-        url: props.api,
-        headers: props.headers || {}
+        url: props.config.api.url,
+        subscriptionUrl: props.config.api.subscriptionUrl,
+        headers: props.config.api.headers || {},
+        wsConnectionParams: props.config.api.wsConnectionParams || {}
     });
+    let _graphiql;
+
+    useEffect(() => {
+        fetchSchema(props.config.api.url, props.config.api.headers || {}, props.config.excludeMutations ?? false, props.config.excludeSubscriptions ?? false)
+            .then((schema) => {
+                setSchema(schema);
+            })
+    }, [
+        props.config.api.url,
+        props.config.api.headers,
+        props.config.api.subscriptionUrl,
+        props.config.api.wsConnectionParams,
+        props.config.excludeMutations,
+        props.config.excludeSubscriptions
+    ]);
 
     return (
         <div id="graphiql-webcomponent" style="height: 100%">
             <style>{style}</style>
-            <GraphiQL
-                fetcher={fetcher}
-                editorTheme={props.editorTheme || 'dracula'}
-                defaultQuery={props.defaultQuery || ''}
-            />
+            <div className="graphiql-container" style="height: 100%">
+                <GraphiQLExplorer
+                    schema={schema}
+                    query={query}
+                    onEdit={setQuery}
+                    onRunOperation={(operationName) => {
+                            _graphiql.handleRunQuery(operationName);
+                        }
+                    }
+                    explorerIsOpen={explorerIsOpen}
+                    onToggleExplorer={() => setExplorerIsOpen(!explorerIsOpen)}
+                    getDefaultScalarArgValue={getDefaultScalarArgValue}
+                    makeDefaultArg={makeDefaultArg}
+                />
+                <GraphiQL
+                    ref={(ref) => {_graphiql = ref}}
+                    fetcher={fetcher}
+                    schema={schema}
+                    editorTheme={props.config.editorTheme || 'dracula'}
+                    query={query}
+                    onEditQuery={setQuery}
+                    headerEditorEnabled={false}
+                >
+                    <GraphiQL.Toolbar>
+                        <GraphiQL.Button
+                            onClick={() => _graphiql.handlePrettifyQuery()}
+                            label="Prettify"
+                            title="Prettify Query (Shift-Ctrl-P)"
+                        />
+                        <GraphiQL.Button
+                            onClick={() => _graphiql.handleToggleHistory()}
+                            label="History"
+                            title="Show History"
+                        />
+                        {
+                            !props.config.disableExplorer &&
+                            <GraphiQL.Button
+                                onClick={() => setExplorerIsOpen(!explorerIsOpen)}
+                                label="Explorer"
+                                title="Toggle Explorer"
+                            />
+                        }
+
+                    </GraphiQL.Toolbar>
+                </GraphiQL>
+            </div>
         </div>
     )
 }
