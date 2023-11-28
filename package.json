@@ -3,7 +3,7 @@
   "homepage": "https://github.com/ninjaneers-team/graphiql-webcomponent",
   "repository": "https://github.com/ninjaneers-team/graphiql-webcomponent",
   "license": "MIT",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "module": "./dist/graphiql-webcomponent.es.js",
   "files": [
     "/dist"
