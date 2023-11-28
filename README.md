@@ -1,29 +1,61 @@
 # GraphiQL Webcomponent
-A webcomponent wrapper around [GraphiQL](https://github.com/graphql/graphiql) and [GraphiQL-Explorer](https://github.com/OneGraph/graphiql-explorer/).
+A Webcomponent wrapper around [GraphiQL](https://github.com/graphql/graphiql) and [GraphiQL-Explorer](https://github.com/OneGraph/graphiql-explorer/).
 
 ## Usage
 ### Angular2
-Add `import @ninjaneers/graphiql-webcomponent;` to your app.module.ts to register the webcomponent in the browser.
+Add `import @ninjaneers/graphiql-webcomponent;` to your app.module.ts to register the Webcomponent in the browser.
 
-Add `schemas: [CUSTOM_ELEMENTS_SCHEMA]` to the modules where the webcomponent will be used.
+Add `schemas: [CUSTOM_ELEMENTS_SCHEMA]` to the modules where the Webcomponent will be used.
 
-Now you can use the webcomponent in your angular templates like this:
+Now you can use the Webcomponent in your Angular templates like this:
 ```angular2html
     <div *ngIf="config$ | async as config">
-        <graphiql-webcomponent
-                [config]="config"
+        <graphiql-webcomponent #graphiql
+          [config]="config"
+           [query]="''"
+           [variables]="{}"
         ></graphiql-webcomponent>
     </div>
+```
+
+```typescript
+  export class ParentComponent implements AfterViewInit {
+    
+  public config$ = new BehaviorSubject({
+    api: {
+      url: 'http://localhost:8080/graphql',
+    },
+  })
+  @ViewChild('graphiql')
+  public graphiql: ElementRef;
+
+  public ngAfterViewInit(): void {
+    this.graphiql.nativeElement.addEventListener('QueryChange', (event) => console.dir(event));
+    this.graphiql.nativeElement.addEventListener('VariablesChange', (event) => console.dir(event));  
+  }
+}
+
+
 ```
 
 ### React
 Add `import @ninjaneers/graphiql-webcomponent;` to your index.(js/ts) to register the webcomponent in the browser.
 
-Now you can use the webcomponent in your (j/t)sx like this:
+Now you can use the Webcomponent in your (j/t)sx like this:
+
 ```jsx
-        <graphiql-webcomponent
-                config={config}
-        ></graphiql-webcomponent>
+const Parent = () => {
+  const ref = useRef(null);
+  useEffect(() => {
+    ref.current.addEventListener('QueryChange', (event) => console.dir(event));
+    ref.current.addEventListener('VariablesChange', (event) => console.dir(event));
+  }, [ref]);
+  return <graphiql-webcomponent ref={ref}
+    config={config}
+    query={""}
+    variables={{}}
+  ></graphiql-webcomponent>
+}
 ```
 
 ## Config

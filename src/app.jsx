@@ -1,9 +1,9 @@
 import GraphiQL from 'graphiql';
 import { createGraphiQLFetcher } from '@graphiql/toolkit';
 import style from 'graphiql/graphiql.min.css';
-import {buildClientSchema, getIntrospectionQuery, isEnumType, isWrappingType, parse} from "graphql";
+import { buildClientSchema, getIntrospectionQuery, isEnumType, isWrappingType, parse } from "graphql";
 import GraphiQLExplorer from "graphiql-explorer";
-import {useEffect, useState} from "preact/compat";
+import { useEffect, useRef, useState } from "preact/compat";
 
 function unwrapOutputType(outputType) {
     let unwrappedType = outputType;
@@ -115,7 +115,37 @@ const App = (props) => {
 
     const [schema, setSchema] = useState();
     const [query, setQuery] = useState(props.config?.defaultQuery ?? '');
+    const prevQuery = useRef(props.config?.defaultQuery ?? '');
+    const [variables, setVariables] = useState(props.config?.defaultVariables ?? '');
+    const prevVariables = useRef(props.config?.defaultVariables ?? '');
     const [explorerIsOpen, setExplorerIsOpen] = useState(!props.config?.disableExplorer ?? false);
+    const graphiql = useRef(null);
+
+    useEffect(() => {
+        if (query !== prevQuery.current) {
+            graphiql.current.dispatchEvent(new CustomEvent('QueryChange', {bubbles: true, composed: true, detail: {current: query, previous: prevQuery.current}}));
+            prevQuery.current = query;
+        }
+    }, [query]);
+
+    useEffect(() => {
+        if (variables !== prevVariables.current) {
+            graphiql.current.dispatchEvent(new CustomEvent('VariablesChange', {bubbles: true, composed: true, detail: {current: variables, previous: prevVariables.current}}));
+            prevVariables.current = variables;
+        }
+    }, [variables]);
+
+    useEffect(() => {
+        if (props.query) {
+            setQuery(props.query)
+        }
+    }, [props.query]);
+
+    useEffect(() => {
+        if (props.variables) {
+            setVariables(props.variables)
+        }
+    }, [props.variables]);
 
     const fetcher = createGraphiQLFetcher({
         url: props.config.api.url,
@@ -140,7 +170,7 @@ const App = (props) => {
     ]);
 
     return (
-        <div id="graphiql-webcomponent" style="height: 100%">
+        <div id="graphiql-webcomponent" style="height: 100%" ref={graphiql}>
             <style>{style}</style>
             <div className="graphiql-container" style="height: 100%">
                 <GraphiQLExplorer
@@ -160,6 +190,8 @@ const App = (props) => {
                     ref={(ref) => {_graphiql = ref}}
                     fetcher={fetcher}
                     schema={schema}
+                    variables={variables}
+                    onEditVariables={setVariables}
                     editorTheme={props.config.editorTheme || 'dracula'}
                     query={query}
                     onEditQuery={setQuery}
